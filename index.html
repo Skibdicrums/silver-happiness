@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Skull Spin</title>
+<style>
+  :root{
+    --bg:#000;
+    --skull:#fff;
+  }
+  html,body{
+    height:100%;
+    margin:0;
+    background:var(--bg);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+
+  /* full canvas container */
+  .canvas{
+    position:fixed;
+    inset:0;
+    pointer-events:none; /* so page isn't obstructed */
+  }
+
+  .skull{
+    position:absolute;
+    transform-origin:center center;
+    will-change: transform, opacity;
+    opacity:0.95;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6));
+  }
+
+  /* fast continuous spin animation (duration replaced by inline style) */
+  @keyframes spin {
+    from{ transform: translate(-50%,-50%) rotate(0deg); }
+    to  { transform: translate(-50%,-50%) rotate(360deg); }
+  }
+
+  /* optional subtle flicker / float for depth */
+  @keyframes floaty {
+    0% { transform: translate(-50%,-50%) translateY(0px); }
+    50% { transform: translate(-50%,-50%) translateY(-6px); }
+    100% { transform: translate(-50%,-50%) translateY(0px); }
+  }
+
+  /* small UI at top-left for quick settings (non-intrusive) */
+  .ui {
+    position: fixed;
+    left: 14px;
+    top: 14px;
+    z-index: 9999;
+    color: #eee;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    font-size: 13px;
+    background: rgba(255,255,255,0.03);
+    padding:8px 10px;
+    border-radius:8px;
+    backdrop-filter: blur(6px) saturate(120%);
+    pointer-events:auto;
+  }
+
+  .ui label{font-weight:600; margin-right:6px; color:#fff;}
+  .ui input[type=range]{vertical-align:middle; width:140px;}
+  .ui button { margin-left:6px; padding:6px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.06); background:transparent; color:#fff; cursor:pointer; }
+  .ui small{ display:block; color:#bbb; margin-top:6px; font-weight:500; }
+</style>
+</head>
+<body>
+  <div class="canvas" id="canvas"></div>
+
+  <div class="ui" id="ui">
+    <label>Skulls</label>
+    <input id="count" type="range" min="6" max="120" value="36">
+    <button id="regen">Regenerate</button>
+    <small>Drag to change count. Click regenerate for new layout.</small>
+  </div>
+
+<script>
+/* CONFIG - tune these to change the effect */
+const COUNT_DEFAULT = 36;   // initial skull count
+const MIN_SIZE = 28;        // px (smallest skull)
+const MAX_SIZE = 200;       // px (largest skull)
+const MIN_SPEED = 0.45;     // seconds per rotation (fast = smaller)
+const MAX_SPEED = 1.25;     // seconds per rotation
+const SKEW_3D = 20;         // degrees tilt for 3D-ish look
+
+/* Inline SVG skull (white fill) - easy to style via CSS 'fill' */
+const skullSVG = `
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <g fill="currentColor" stroke="none">
+    <!-- simplified skull shape — compact and bold -->
+    <path d="M256 0C165 0 95 70 95 161c0 37 13 71 35 98-2 18-10 35-25 49-18 17-29 41-29 66v20c0 15 12 27 27 27h15c12 0 22-8 25-19 4-13 16-22 30-22h117c14 0 26 9 30 22 3 11 13 19 25 19h15c15 0 27-12 27-27v-20c0-25-11-49-29-66-15-14-23-31-25-49 22-27 35-61 35-98C417 70 347 0 256 0zm-82 207c-23 0-42-19-42-42s19-42 42-42 42 19 42 42-19 42-42 42zm164 0c-23 0-42-19-42-42s19-42 42-42 42 19 42 42-19 42-42 42z"/>
+  </g>
+</svg>
+`;
+
+/* main generation logic */
+const canvas = document.getElementById('canvas');
+const uiCount = document.getElementById('count');
+const regenBtn = document.getElementById('regen');
+
+function generate(count){
+  // clear
+  canvas.innerHTML = '';
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  for(let i=0;i<count;i++){
+    const el = document.createElement('div');
+    el.className = 'skull';
+
+    // random size
+    const size = Math.round(rand(MIN_SIZE, MAX_SIZE));
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
+    el.style.fontSize = size + 'px'; // currentColor scaling for svg
+
+    // random position (slightly off-screen allowed)
+    const left = rand(-10, 110); // percent
+    const top  = rand(-8, 108);  // percent
+    el.style.left = left + '%';
+    el.style.top  = top  + '%';
+
+    // random rotation around center
+    const startRot = rand(0,360);
+    // speed: fast spins -> smaller number; we randomize between MIN_SPEED..MAX_SPEED
+    const speed = rand(MIN_SPEED, MAX_SPEED).toFixed(2);
+    // direction (clockwise or counter)
+    const dir = Math.random() < 0.5 ? 1 : -1;
+
+    // apply CSS animation for spin (duration set inline)
+    el.style.animation = `spin ${speed}s linear ${dir === -1 ? 'reverse' : 'normal'} infinite, floaty ${rand(4,8)}s ease-in-out ${i%2 ? 'alternate' : ''} infinite`;
+
+    // slight 3D tilt
+    const tilt = rand(-SKEW_3D, SKEW_3D);
+    el.style.transform = `translate(-50%,-50%) rotate(${startRot}deg) perspective(800px) rotateX(${tilt/5}deg)`;
+
+    // set color to white (currentColor)
+    el.style.color = '#fff';
+
+    // inner HTML: the skull SVG scaled to 100% of box
+    el.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+      ${skullSVG}
+    </div>`;
+
+    // pointer-events none keeps site interactive if you add links later
+    el.style.pointerEvents = 'none';
+
+    // random opacity variance
+    el.style.opacity = rand(0.75,1);
+
+    canvas.appendChild(el);
+  }
+}
+
+/* helper random */
+function rand(min, max){
+  return Math.random() * (max - min) + min;
+}
+
+/* initial render and UI hooks */
+uiCount.value = COUNT_DEFAULT;
+generate(Number(uiCount.value));
+
+uiCount.addEventListener('input', ()=> {
+  // live update count visually but don't regen until button click for performance
+  // we change the label title to show value quickly:
+  uiCount.title = uiCount.value;
+});
+
+regenBtn.addEventListener('click', ()=>{
+  generate(Number(uiCount.value));
+});
+
+/* regenerate on resize with same count */
+let resizeTimer;
+window.addEventListener('resize', ()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=>{
+    generate(Number(uiCount.value));
+  }, 120);
+});
+
+// allow toggling speed quickly by pressing S (speed up) or D (slow down)
+window.addEventListener('keydown', (e)=>{
+  if(e.key.toLowerCase() === 's'){
+    // speed up: multiply durations by 0.62
+    adjustSpeeds(0.62);
+  } else if(e.key.toLowerCase() === 'd'){
+    // slow down: multiply durations by 1.5
+    adjustSpeeds(1.5);
+  }
+});
+
+function adjustSpeeds(factor){
+  document.querySelectorAll('.skull').forEach(el=>{
+    const current = getComputedStyle(el).animationDuration.split(',')[0].trim();
+    // current is like "0.75s"
+    const sec = parseFloat(current);
+    const newSec = Math.max(0.08, sec * factor).toFixed(2) + 's';
+    // preserve other parts (direction etc) - recompose using second animation component if present
+    const parts = getComputedStyle(el).animationName.split(',');
+    // simple overwrite spin duration only:
+    el.style.animation = `spin ${newSec} linear ${getComputedStyle(el).animationDirection || 'normal'} infinite, ${getComputedStyle(el).animationName.includes('floaty') ? 'floaty ' + (rand(4,8)+'s') + ' ease-in-out alternate infinite' : ''}`;
+  });
+}
+</script>
+</body>
+</html>
