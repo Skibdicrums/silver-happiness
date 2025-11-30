@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Face Ritual Scanner</title>
+
+<!-- Google Font -->
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+
+<!-- face-api.js -->
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+
+<style>
+body {
+    background: #000;
+    color: #c9b8ff;
+    font-family: 'Cinzel', serif;
+    text-align: center;
+    padding: 40px;
+    background-image: url('https://i.imgur.com/7yP4e63.jpeg'); /* dark stone texture */
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+
+h1 {
+    font-size: 42px;
+    letter-spacing: 3px;
+    text-shadow: 0 0 15px #7a00ff;
+}
+
+#uploadBox {
+    margin: 20px auto;
+    padding: 25px;
+    width: 320px;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(6px);
+    border: 1px solid #4b0082;
+    border-radius: 14px;
+    box-shadow: 0 0 30px #4b0082;
+}
+
+input[type="file"] {
+    margin-top: 10px;
+    color: #fff;
+}
+
+button {
+    margin-top: 20px;
+    padding: 12px 25px;
+    background: #4b0082;
+    border: none;
+    color: white;
+    font-size: 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 0 15px #4b0082;
+    transition: 0.3s;
+}
+button:hover {
+    background: #7a00ff;
+    box-shadow: 0 0 25px #7a00ff;
+}
+
+#results {
+    margin-top: 25px;
+    font-size: 18px;
+}
+
+canvas {
+    margin-top: 20px;
+    border: 2px solid #4b0082;
+    box-shadow: 0 0 30px #4b0082;
+}
+</style>
+</head>
+
+<body>
+<h1>FACE RITUAL SCANNER</h1>
+
+<div id="uploadBox">
+    <p>Summon a face for analysis:</p>
+    <input type="file" id="imageUpload" accept="image/*">
+    <button id="scanBtn">Begin Ritual</button>
+</div>
+
+<div id="results"></div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+async function loadModels() {
+    await faceapi.nets.ssdMobilenetv1.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js/models');
+    await faceapi.nets.ageGenderNet.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js/models');
+    await faceapi.nets.faceExpressionNet.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js/models');
+}
+loadModels();
+
+document.getElementById("scanBtn").addEventListener("click", async () => {
+    const imageUpload = document.getElementById("imageUpload").files[0];
+    if (!imageUpload) {
+        alert("Upload an image first.");
+        return;
+    }
+
+    const img = await faceapi.bufferToImage(imageUpload);
+    const canvas = document.getElementById("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+
+    const result = await faceapi.detectSingleFace(img).withAgeAndGender().withFaceExpressions();
+
+    if (!result) {
+        document.getElementById("results").innerHTML = "<p>No face detected.</p>";
+        return;
+    }
+
+    let age = result.age.toFixed(0);
+    let gender = result.gender;
+    let emotion = Object.entries(result.expressions).sort((a,b)=>b[1]-a[1])[0][0];
+
+    document.getElementById("results").innerHTML = `
+        <p><strong>Age:</strong> ${age}</p>
+        <p><strong>Gender:</strong> ${gender}</p>
+        <p><strong>Emotion:</strong> ${emotion}</p>
+    `;
+
+    faceapi.draw.drawDetections(canvas, result);
+});
+</script>
+
+</body>
+</html>
